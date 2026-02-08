@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wrangler Dashboard</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <ul class="nav-links">
+            <li><a href="wrangler-dashboard.html">Dashboard</a></li>
+            <li><a href="manage-expectations.html">Expectations</a></li>
+            <li><a href="manage-projects.html">Projects</a></li>
+            <li><a href="manage-organizations.html">Organizations</a></li>
+            <li><a href="manage-links.html">Links</a></li>
+            <li><a href="data-ops.html">Data Ops</a></li>
+            <li><a href="#" data-action="logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="page-header">
+        <h1>Wrangler Dashboard</h1>
+        <div class="user-info">
+            <span data-user-name></span>
+            <span data-user-email></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2 class="card-title">Quick Stats</h2>
+            <div class="dashboard-grid">
+                <div class="dashboard-card" style="cursor: default;">
+                    <h3 id="statOrgs">0</h3>
+                    <p>Organizations</p>
+                </div>
+                <div class="dashboard-card" style="cursor: default;">
+                    <h3 id="statProjects">0</h3>
+                    <p>Projects</p>
+                </div>
+                <div class="dashboard-card" style="cursor: default;">
+                    <h3 id="statExpectations">0</h3>
+                    <p>Expectations</p>
+                </div>
+                <div class="dashboard-card" style="cursor: default;">
+                    <h3 id="statData">0</h3>
+                    <p>Data Entries</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">Management Actions</h2>
+            <div class="dashboard-grid">
+                <a href="manage-expectations.html" class="dashboard-card">
+                    <h3>Data Set Expectations</h3>
+                    <p>Define the data points to collect</p>
+                </a>
+                <a href="manage-projects.html" class="dashboard-card">
+                    <h3>Projects</h3>
+                    <p>Create and manage projects</p>
+                </a>
+                <a href="manage-organizations.html" class="dashboard-card">
+                    <h3>Organizations</h3>
+                    <p>Manage customer organizations</p>
+                </a>
+                <a href="manage-links.html" class="dashboard-card">
+                    <h3>Links</h3>
+                    <p>Connect expectations and orgs to projects</p>
+                </a>
+                <a href="data-ops.html" class="dashboard-card">
+                    <h3>Data Ops</h3>
+                    <p>Review data & bulk imports</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Require wrangler access
+        if (!Auth.requireWrangler()) {
+            throw new Error('Access denied');
+        }
+
+        function loadStats() {
+            document.getElementById('statOrgs').textContent = Storage.getOrganizations().length;
+            document.getElementById('statProjects').textContent = Storage.getProjects().length;
+            document.getElementById('statExpectations').textContent = Storage.getExpectations().length;
+            document.getElementById('statData').textContent = Storage.getCollectedData().length;
+        }
+
+        // Initialize
+        loadStats();
+    </script>
+</body>
+</html>

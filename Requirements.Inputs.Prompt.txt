@@ -1,0 +1,45 @@
+I am wrangling data from a litany of customer organizations and I need a way for organizations to login and enter data aligned to a project. Once the project is selected they should be able to enter data by hand or upload it.
+In support of that I need a way do define these customer organizations which consists of an Organization name, a principal, an email. This is who will login and enter/upload the data.
+In support of that I need a way to define these organizations that will be involved in the projects.
+In support of that, I first need a way to define projects. A project consists  of a project name, and at least one "data set expectation definition" link.  
+In support of that I need a way to create these  "data set expectation defintion" which are simply a set of predefined data points to elicit from the logged in organization as a way of reporting against a project.  Each datapoint defined in a "data set expectation" needs:
+1.A Name
+2.Are Nulls Ok?
+3.Must it be an Int?
+So, I need :
+a way to define these "data set expectation definition"
+I need a way to define Projects
+I need a way to define Organizations 
+I need a way to link at least one "data set expectations definition" to a project.
+I need a way to link at least one customer to at least one project.
+
+So that the customer journey is simple:
+1. Login
+2. Select Project (if more than one)
+3. Enter Data Point(s) - Validated on exit
+4. Logout
+
+The wrangler journey(s) are simple:
+1. Login
+2. Select Project
+3. Review Wrangled Data.
+AND
+Also these journeys:
+4. CRUD Organizations
+5. CRUD Projects
+6. CRUD Organization to Project links
+7. CRUD "Data Set Expectation Definition"
+8. CRUD "Data Set Expectation Definition" to Project Links
+
+Please use your front-end design skills and build this for local storage first, but the long game is AWS after demo is lovable. Please follow the rules found in C:\Users\GilesM\.claude\CLAUDE.md.  I need architecture documentation to include path toward AWS.
+
+Here are some tests:
+1. Given an org named "BABA" linked to project "Preciousiuoisty"
+   And given data set expectation defintion "ZULU100" linked to project "Preciousiuoisty"
+   And given data set expectation defintion "ZULU100" expects 1 column, an integer name "TheCount"
+   When the org logs in and is challenged to enter data for "TheCount"
+   And when they enter "Z"
+   Then the data is regarded as invalid
+   And then the user is gently asked to enter data of the right type.
+
+

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Dashboard</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <div class="page-header">
+        <h1>Welcome, <span data-user-name></span></h1>
+        <div class="user-info">
+            <span data-user-email></span>
+            <a href="my-certifications.html" class="btn btn-secondary btn-sm">My Certifications</a>
+            <button class="btn btn-secondary btn-sm" data-action="logout">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="pageMessage" class="message"></div>
+
+        <div class="card">
+            <h2 class="card-title">Select a Project</h2>
+            <p style="margin-bottom: 16px; color: var(--gray-500);">Choose a project to enter data for:</p>
+
+            <div id="projectsGrid" class="dashboard-grid"></div>
+
+            <div id="noProjects" style="display: none; text-align: center; padding: 40px; color: var(--gray-500);">
+                <p>You are not assigned to any projects yet.</p>
+                <p>Please contact your administrator.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Require login
+        if (!Auth.requireLogin()) {
+            throw new Error('Login required');
+        }
+
+        function loadProjects() {
+            const user = Auth.getCurrentUser();
+            const projects = Storage.getProjectsForOrg(user.id);
+            const grid = document.getElementById('projectsGrid');
+            const noProjects = document.getElementById('noProjects');
+
+            if (projects.length === 0) {
+                grid.style.display = 'none';
+                noProjects.style.display = 'block';
+                return;
+            }
+
+            grid.innerHTML = projects.map(project => {
+                const expectations = Storage.getExpectationsForProject(project.id);
+                const totalColumns = expectations.reduce((sum, e) => sum + e.columns.length, 0);
+
+                // Get last entry date for this customer/project
+                const projectData = Storage.getCollectedData().filter(
+                    d => d.projectId === project.id && d.orgId === user.id
+                );
+                let lastEntryText = 'No entries yet';
+                if (projectData.length > 0) {
+                    // Sort by timestamp descending and get the latest
+                    projectData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    const lastDate = new Date(projectData[0].timestamp);
+                    lastEntryText = 'Last entry: ' + lastDate.toLocaleDateString();
+                }
+
+                // Get compliance status
+                const link = Storage.getOrgProjectLink(user.id, project.id);
+                let complianceHtml = '';
+                if (link && link.reportingInterval) {
+                    const compliance = Storage.getComplianceStatus(link);
+                    let statusColor = 'var(--gray-500)';
+                    let statusStyle = '';
+                    if (compliance.status === 'overdue') {
+                        statusColor = 'var(--error)';
+                        statusStyle = 'font-weight: 600;';
+                    } else if (compliance.status === 'due-today') {
+                        statusColor = 'var(--warning)';
+                        statusStyle = 'font-weight: 600;';
+                    } else if (compliance.status === 'due-soon') {
+                        statusColor = 'var(--warning)';
+                    } else {
+                        statusColor = 'var(--success)';
+                    }
+                    const streakText = link.streak > 0 ? ` | Streak: ${link.streak}` : '';
+                    complianceHtml = `<p style="margin-top: 8px; font-size: 0.875rem; color: ${statusColor}; ${statusStyle}">${compliance.message}${streakText}</p>`;
+                }
+
+                return `
+                    <a href="data-entry.html?project=${project.id}" class="dashboard-card">
+                        <h3>${project.name}</h3>
+                        <p>${expectations.length} data set(s), ${totalColumns} column(s) to enter</p>
+                        ${complianceHtml}
+                        <p style="margin-top: 8px; font-size: 0.75rem; color: var(--gray-500);">${lastEntryText}</p>
+                    </a>
+                `;
+            }).join('');
+        }
+
+        // Initialize
+        loadProjects();
+    </script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Organizations</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <ul class="nav-links">
+            <li><a href="wrangler-dashboard.html">Dashboard</a></li>
+            <li><a href="manage-expectations.html">Expectations</a></li>
+            <li><a href="manage-projects.html">Projects</a></li>
+            <li><a href="manage-organizations.html">Organizations</a></li>
+            <li><a href="manage-links.html">Links</a></li>
+            <li><a href="data-ops.html">Data Ops</a></li>
+            <li><a href="#" data-action="logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="page-header">
+        <h1>Manage Organizations</h1>
+        <div class="user-info">
+            <span data-user-name></span>
+            <span data-user-email></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="pageMessage" class="message"></div>
+
+        <div class="card">
+            <h2 class="card-title" id="formTitle">Create New Organization</h2>
+            <form id="orgForm">
+                <input type="hidden" id="orgId">
+
+                <div class="form-group">
+                    <label for="orgName">Organization Name</label>
+                    <input type="text" id="orgName" required placeholder="e.g., BABA">
+                </div>
+
+                <div class="form-group">
+                    <label for="orgPrincipal">Principal (Contact Person)</label>
+                    <input type="text" id="orgPrincipal" required placeholder="e.g., John Smith">
+                </div>
+
+                <div class="form-group">
+                    <label for="orgEmail">Email (Login)</label>
+                    <input type="email" id="orgEmail" required placeholder="e.g., contact@baba.org">
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="orgIsWrangler">
+                        <label for="orgIsWrangler">Is Wrangler (Admin Access)</label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary">Save Organization</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetForm()">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">Existing Organizations</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Principal</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Projects</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orgsList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Require wrangler access
+        if (!Auth.requireWrangler()) {
+            throw new Error('Access denied');
+        }
+
+        function resetForm() {
+            document.getElementById('orgId').value = '';
+            document.getElementById('orgName').value = '';
+            document.getElementById('orgPrincipal').value = '';
+            document.getElementById('orgEmail').value = '';
+            document.getElementById('orgIsWrangler').checked = false;
+            document.getElementById('formTitle').textContent = 'Create New Organization';
+        }
+
+        function editOrg(id) {
+            const org = Storage.getOrganization(id);
+            if (!org) return;
+
+            document.getElementById('orgId').value = org.id;
+            document.getElementById('orgName').value = org.name;
+            document.getElementById('orgPrincipal').value = org.principal;
+            document.getElementById('orgEmail').value = org.email;
+            document.getElementById('orgIsWrangler').checked = org.isWrangler;
+            document.getElementById('formTitle').textContent = 'Edit Organization';
+        }
+
+        function deleteOrg(id) {
+            const currentUser = Auth.getCurrentUser();
+            if (currentUser && currentUser.id === id) {
+                App.showMessage('pageMessage', 'You cannot delete your own organization while logged in.', true);
+                return;
+            }
+
+            if (confirm('Are you sure you want to delete this organization? This will also remove all project links.')) {
+                Storage.deleteOrganization(id);
+                loadOrgs();
+                App.showMessage('pageMessage', 'Organization deleted successfully');
+            }
+        }
+
+        function loadOrgs() {
+            const orgs = Storage.getOrganizations();
+            const tbody = document.getElementById('orgsList');
+
+            if (orgs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray-500);">No organizations defined yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = orgs.map(org => {
+                const projects = Storage.getProjectsForOrg(org.id);
+
+                return `
+                    <tr>
+                        <td><strong>${org.name}</strong></td>
+                        <td>${org.principal}</td>
+                        <td>${org.email}</td>
+                        <td>${org.isWrangler ? '<span style="color: var(--primary); font-weight: 500;">Wrangler</span>' : 'Customer'}</td>
+                        <td>${projects.length > 0 ? projects.map(p => p.name).join(', ') : '<em style="color: var(--gray-500);">None</em>'}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" onclick="editOrg('${org.id}')">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteOrg('${org.id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Form submission
+        document.getElementById('orgForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const email = document.getElementById('orgEmail').value.trim();
+            const existingOrg = Storage.getOrganizationByEmail(email);
+            const currentId = document.getElementById('orgId').value;
+
+            // Check for duplicate email (but allow same email for same org when editing)
+            if (existingOrg && existingOrg.id !== currentId) {
+                App.showMessage('pageMessage', 'An organization with this email already exists.', true);
+                return;
+            }
+
+            const org = {
+                id: currentId || null,
+                name: document.getElementById('orgName').value.trim(),
+                principal: document.getElementById('orgPrincipal').value.trim(),
+                email: email,
+                isWrangler: document.getElementById('orgIsWrangler').checked
+            };
+
+            Storage.saveOrganization(org);
+            resetForm();
+            loadOrgs();
+            App.showMessage('pageMessage', 'Organization saved successfully');
+        });
+
+        // Initialize
+        loadOrgs();
+    </script>
+</body>
+</html>

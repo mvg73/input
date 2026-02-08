@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Ops</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <ul class="nav-links">
+            <li><a href="wrangler-dashboard.html">Dashboard</a></li>
+            <li><a href="manage-expectations.html">Expectations</a></li>
+            <li><a href="manage-projects.html">Projects</a></li>
+            <li><a href="manage-organizations.html">Organizations</a></li>
+            <li><a href="manage-links.html">Links</a></li>
+            <li><a href="data-ops.html">Data Ops</a></li>
+            <li><a href="#" data-action="logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="page-header">
+        <h1>Data Ops</h1>
+        <div class="user-info">
+            <span data-user-name></span>
+            <span data-user-email></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="pageMessage" class="message"></div>
+
+        <!-- Bulk Import Section -->
+        <div class="card">
+            <h2 class="card-title">Bulk Import Organizations</h2>
+            <p style="margin-bottom: 16px; color: var(--gray-500);">
+                Upload a CSV file with 4 columns: <strong>name, principal, email, isWrangler</strong><br>
+                <small>isWrangler should be "true" or "false". First row can be a header (will be skipped if detected).</small>
+            </p>
+
+            <div class="form-group">
+                <label for="csvFile">Select CSV File</label>
+                <input type="file" id="csvFile" accept=".csv" style="padding: 8px;">
+            </div>
+
+            <div id="csvPreview" style="display: none; margin-bottom: 16px;">
+                <h3 style="font-size: 1rem; margin-bottom: 8px;">Preview (first 5 rows)</h3>
+                <div class="table-container">
+                    <table id="previewTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Principal</th>
+                                <th>Email</th>
+                                <th>Is Wrangler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewBody"></tbody>
+                    </table>
+                </div>
+                <p id="previewCount" style="margin-top: 8px; color: var(--gray-500);"></p>
+            </div>
+
+            <div id="importButtons" style="display: none; gap: 12px;">
+                <button class="btn btn-primary" onclick="importOrganizations()">Import All</button>
+                <button class="btn btn-secondary" onclick="cancelImport()">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Compliance Dashboard Section -->
+        <div class="card">
+            <h2 class="card-title">Compliance Dashboard</h2>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;">
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label for="complianceFilterProject">Project</label>
+                    <select id="complianceFilterProject">
+                        <option value="">All Projects</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label for="complianceFilterStatus">Status</label>
+                    <select id="complianceFilterStatus">
+                        <option value="">All Statuses</option>
+                        <option value="overdue">Overdue Only</option>
+                        <option value="due-today">Due Today</option>
+                        <option value="due-soon">Due Soon (1-3 days)</option>
+                        <option value="on-track">On Track</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Organization</th>
+                            <th>Project</th>
+                            <th>Schedule</th>
+                            <th>Status</th>
+                            <th>Streak</th>
+                            <th>Last Submission</th>
+                        </tr>
+                    </thead>
+                    <tbody id="complianceList"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Review Data Section -->
+        <div class="card">
+            <h2 class="card-title">Review Collected Data</h2>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label for="filterProject">Project</label>
+                    <select id="filterProject">
+                        <option value="">All Projects</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label for="filterOrg">Organization</label>
+                    <select id="filterOrg">
+                        <option value="">All Organizations</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label for="filterExpectation">Expectation</label>
+                    <select id="filterExpectation">
+                        <option value="">All Expectations</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">Collected Data <span id="dataCount" style="font-weight: normal; color: var(--gray-500);"></span></h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Organization</th>
+                            <th>Project</th>
+                            <th>Expectation</th>
+                            <th>Data</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Require wrangler access
+        if (!Auth.requireWrangler()) {
+            throw new Error('Access denied');
+        }
+
+        // CSV Import functionality
+        let parsedOrgs = [];
+
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const csv = event.target.result;
+                parseCSV(csv);
+            };
+            reader.readAsText(file);
+        });
+
+        function parseCSV(csv) {
+            const lines = csv.split(/\r?\n/).filter(line => line.trim());
+            parsedOrgs = [];
+
+            // Check if first line is a header
+            const firstLine = lines[0].toLowerCase();
+            const startIndex = (firstLine.includes('name') && firstLine.includes('email')) ? 1 : 0;
+
+            for (let i = startIndex; i < lines.length; i++) {
+                const values = parseCSVLine(lines[i]);
+                if (values.length >= 4) {
+                    parsedOrgs.push({
+                        name: values[0].trim(),
+                        principal: values[1].trim(),
+                        email: values[2].trim(),
+                        isWrangler: values[3].trim().toLowerCase() === 'true'
+                    });
+                }
+            }
+
+            if (parsedOrgs.length === 0) {
+                App.showMessage('pageMessage', 'No valid rows found in CSV. Ensure format: name, principal, email, isWrangler', true);
+                return;
+            }
+
+            // Show preview
+            const previewBody = document.getElementById('previewBody');
+            const previewRows = parsedOrgs.slice(0, 5);
+            previewBody.innerHTML = previewRows.map(org => `
+                <tr>
+                    <td>${org.name}</td>
+                    <td>${org.principal}</td>
+                    <td>${org.email}</td>
+                    <td>${org.isWrangler ? 'Yes' : 'No'}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('previewCount').textContent =
+                `Total rows to import: ${parsedOrgs.length}` +
+                (parsedOrgs.length > 5 ? ` (showing first 5)` : '');
+
+            document.getElementById('csvPreview').style.display = 'block';
+            document.getElementById('importButtons').style.display = 'flex';
+        }
+
+        function parseCSVLine(line) {
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    values.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            values.push(current);
+            return values;
+        }
+
+        function importOrganizations() {
+            let imported = 0;
+            let skipped = 0;
+
+            parsedOrgs.forEach(org => {
+                // Check if email already exists
+                const existing = Storage.getOrganizationByEmail(org.email);
+                if (existing) {
+                    skipped++;
+                } else {
+                    Storage.saveOrganization(org);
+                    imported++;
+                }
+            });
+
+            App.showMessage('pageMessage',
+                `Import complete: ${imported} organizations added` +
+                (skipped > 0 ? `, ${skipped} skipped (duplicate email)` : '')
+            );
+
+            cancelImport();
+            loadFilters(); // Refresh the org dropdown
+        }
+
+        function cancelImport() {
+            document.getElementById('csvFile').value = '';
+            document.getElementById('csvPreview').style.display = 'none';
+            document.getElementById('importButtons').style.display = 'none';
+            parsedOrgs = [];
+        }
+
+        // Review Data functionality
+        function loadFilters() {
+            // Projects
+            const projects = Storage.getProjects();
+            const projectSelect = document.getElementById('filterProject');
+            projectSelect.innerHTML = '<option value="">All Projects</option>';
+            projects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                projectSelect.appendChild(opt);
+            });
+
+            // Organizations
+            const orgs = Storage.getOrganizations();
+            const orgSelect = document.getElementById('filterOrg');
+            orgSelect.innerHTML = '<option value="">All Organizations</option>';
+            orgs.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.id;
+                opt.textContent = o.name;
+                orgSelect.appendChild(opt);
+            });
+
+            // Expectations
+            const expectations = Storage.getExpectations();
+            const expSelect = document.getElementById('filterExpectation');
+            expSelect.innerHTML = '<option value="">All Expectations</option>';
+            expectations.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.id;
+                opt.textContent = e.name;
+                expSelect.appendChild(opt);
+            });
+
+            // Add change listeners (remove old ones first by replacing elements would be complex, so just use onchange)
+            projectSelect.onchange = loadData;
+            orgSelect.onchange = loadData;
+            expSelect.onchange = loadData;
+        }
+
+        function loadData() {
+            const filterProject = document.getElementById('filterProject').value;
+            const filterOrg = document.getElementById('filterOrg').value;
+            const filterExp = document.getElementById('filterExpectation').value;
+
+            let data = Storage.getCollectedData();
+
+            // Apply filters
+            if (filterProject) {
+                data = data.filter(d => d.projectId === filterProject);
+            }
+            if (filterOrg) {
+                data = data.filter(d => d.orgId === filterOrg);
+            }
+            if (filterExp) {
+                data = data.filter(d => d.expectationId === filterExp);
+            }
+
+            // Sort by timestamp (newest first)
+            data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            const tbody = document.getElementById('dataList');
+            const countEl = document.getElementById('dataCount');
+            countEl.textContent = `(${data.length} entries)`;
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray-500);">No data collected yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(entry => {
+                const org = Storage.getOrganization(entry.orgId);
+                const project = Storage.getProject(entry.projectId);
+                const expectation = Storage.getExpectation(entry.expectationId);
+
+                const timestamp = new Date(entry.timestamp).toLocaleString();
+                const dataStr = Object.entries(entry.data)
+                    .map(([k, v]) => `<strong>${k}:</strong> ${v || '<em>empty</em>'}`)
+                    .join(', ');
+
+                return `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${org ? org.name : '<em>Unknown</em>'}</td>
+                        <td>${project ? project.name : '<em>Unknown</em>'}</td>
+                        <td>${expectation ? expectation.name : '<em>Unknown</em>'}</td>
+                        <td>${dataStr}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="deleteEntry('${entry.id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function deleteEntry(id) {
+            if (confirm('Are you sure you want to delete this data entry?')) {
+                Storage.deleteCollectedData(id);
+                loadData();
+                App.showMessage('pageMessage', 'Data entry deleted');
+            }
+        }
+
+        // Compliance Dashboard functionality
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        function loadComplianceFilters() {
+            const projects = Storage.getProjects();
+            const projectSelect = document.getElementById('complianceFilterProject');
+            projectSelect.innerHTML = '<option value="">All Projects</option>';
+            projects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                projectSelect.appendChild(opt);
+            });
+
+            projectSelect.onchange = loadComplianceData;
+            document.getElementById('complianceFilterStatus').onchange = loadComplianceData;
+        }
+
+        function getScheduleText(link) {
+            if (!link.reportingInterval) return '<em>No schedule</em>';
+
+            let text = link.reportingInterval.charAt(0).toUpperCase() + link.reportingInterval.slice(1);
+            if (link.reportingInterval === 'weekly') {
+                text += ` (${dayNames[link.reportingDayOfWeek || 0]})`;
+            } else if (link.reportingInterval === 'monthly') {
+                text += ` (Day ${link.reportingDayOfMonth || 1})`;
+            }
+            return text;
+        }
+
+        function loadComplianceData() {
+            const filterProject = document.getElementById('complianceFilterProject').value;
+            const filterStatus = document.getElementById('complianceFilterStatus').value;
+
+            let links = Storage.getOrgProjectLinks().filter(l => l.reportingInterval); // Only scheduled links
+
+            // Apply project filter
+            if (filterProject) {
+                links = links.filter(l => l.projectId === filterProject);
+            }
+
+            // Calculate compliance for each link and apply status filter
+            const complianceData = links.map(link => {
+                const org = Storage.getOrganization(link.orgId);
+                const project = Storage.getProject(link.projectId);
+                const compliance = Storage.getComplianceStatus(link);
+                return { link, org, project, compliance };
+            }).filter(item => {
+                if (!filterStatus) return true;
+                return item.compliance.status === filterStatus;
+            });
+
+            // Sort: overdue first, then by due date
+            complianceData.sort((a, b) => {
+                if (a.compliance.status === 'overdue' && b.compliance.status !== 'overdue') return -1;
+                if (b.compliance.status === 'overdue' && a.compliance.status !== 'overdue') return 1;
+                return (a.compliance.daysUntil || 999) - (b.compliance.daysUntil || 999);
+            });
+
+            const tbody = document.getElementById('complianceList');
+
+            if (complianceData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray-500);">No scheduled reporting found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = complianceData.map(({ link, org, project, compliance }) => {
+                if (!org || !project) return '';
+
+                let statusColor = 'var(--gray-500)';
+                if (compliance.status === 'overdue') statusColor = 'var(--error)';
+                else if (compliance.status === 'due-today' || compliance.status === 'due-soon') statusColor = 'var(--warning)';
+                else if (compliance.status === 'on-track') statusColor = 'var(--success)';
+
+                const lastSubmission = link.history && link.history.length > 0
+                    ? new Date(link.history[0].submittedDate).toLocaleDateString()
+                    : '<em>Never</em>';
+
+                return `
+                    <tr>
+                        <td>${org.name}</td>
+                        <td>${project.name}</td>
+                        <td>${getScheduleText(link)}</td>
+                        <td style="color: ${statusColor}; font-weight: ${compliance.status === 'overdue' ? '600' : '400'};">${compliance.message}</td>
+                        <td>${link.streak || 0}</td>
+                        <td>${lastSubmission}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Initialize
+        loadFilters();
+        loadComplianceFilters();
+        loadData();
+        loadComplianceData();
+    </script>
+</body>
+</html>

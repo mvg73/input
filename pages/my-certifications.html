@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Certifications</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <div class="page-header">
+        <h1>My Certifications</h1>
+        <div class="user-info">
+            <span data-user-name></span>
+            <a href="customer-dashboard.html" class="btn btn-secondary btn-sm">Projects</a>
+            <button class="btn btn-secondary btn-sm" data-action="logout">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="certificationsContainer"></div>
+
+        <div id="noCertifications" style="display: none;" class="card">
+            <p style="text-align: center; color: var(--gray-500); padding: 40px;">
+                You haven't submitted any certifications yet.<br>
+                <a href="customer-dashboard.html" style="color: var(--primary);">Go to Projects</a> to enter data.
+            </p>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Require login
+        if (!Auth.requireLogin()) {
+            throw new Error('Login required');
+        }
+
+        const user = Auth.getCurrentUser();
+
+        function loadCertifications() {
+            const container = document.getElementById('certificationsContainer');
+            const noCertifications = document.getElementById('noCertifications');
+
+            // Get all data for this user
+            const allData = Storage.getCollectedData().filter(d => d.orgId === user.id);
+
+            if (allData.length === 0) {
+                container.style.display = 'none';
+                noCertifications.style.display = 'block';
+                return;
+            }
+
+            // Group by project
+            const byProject = {};
+            allData.forEach(entry => {
+                if (!byProject[entry.projectId]) {
+                    byProject[entry.projectId] = [];
+                }
+                byProject[entry.projectId].push(entry);
+            });
+
+            // Build HTML for each project
+            let html = '';
+            for (const projectId in byProject) {
+                const project = Storage.getProject(projectId);
+                const projectName = project ? project.name : 'Unknown Project';
+                const entries = byProject[projectId];
+
+                // Sort entries by timestamp (newest first)
+                entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                html += `
+                    <div class="card">
+                        <h2 class="card-title">${projectName} <span style="font-weight: normal; color: var(--gray-500);">(${entries.length} certification${entries.length !== 1 ? 's' : ''})</span></h2>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Data Set</th>
+                                        <th>Values</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${entries.map(entry => {
+                                        const expectation = Storage.getExpectation(entry.expectationId);
+                                        const expName = expectation ? expectation.name : 'Unknown';
+                                        const timestamp = new Date(entry.timestamp).toLocaleString();
+                                        const values = Object.entries(entry.data)
+                                            .map(([k, v]) => `<strong>${k}:</strong> ${v || '<em>empty</em>'}`)
+                                            .join(', ');
+
+                                        return `
+                                            <tr>
+                                                <td>${timestamp}</td>
+                                                <td>${expName}</td>
+                                                <td>${values}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Initialize
+        loadCertifications();
+    </script>
+</body>
+</html>

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Links</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <nav class="nav">
+        <ul class="nav-links">
+            <li><a href="wrangler-dashboard.html">Dashboard</a></li>
+            <li><a href="manage-expectations.html">Expectations</a></li>
+            <li><a href="manage-projects.html">Projects</a></li>
+            <li><a href="manage-organizations.html">Organizations</a></li>
+            <li><a href="manage-links.html">Links</a></li>
+            <li><a href="data-ops.html">Data Ops</a></li>
+            <li><a href="#" data-action="logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="page-header">
+        <h1>Manage Links</h1>
+        <div class="user-info">
+            <span data-user-name></span>
+            <span data-user-email></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="pageMessage" class="message"></div>
+
+        <div class="link-section">
+            <!-- Expectation to Project Links -->
+            <div class="card">
+                <h2 class="card-title">Link Expectations to Projects</h2>
+
+                <form id="expectationLinkForm">
+                    <div class="form-group">
+                        <label for="selectExpectation">Expectation</label>
+                        <select id="selectExpectation" required></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="selectProjectForExp">Project</label>
+                        <select id="selectProjectForExp" required></select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Link Expectation to Project</button>
+                </form>
+
+                <h3 style="margin-top: 24px; margin-bottom: 12px; font-size: 1rem;">Current Expectation Links</h3>
+                <ul id="expectationLinksList" class="link-list"></ul>
+            </div>
+
+            <!-- Organization to Project Links -->
+            <div class="card">
+                <h2 class="card-title">Link Organizations to Projects</h2>
+
+                <form id="orgLinkForm">
+                    <div class="form-group">
+                        <label for="selectOrg">Organization</label>
+                        <select id="selectOrg" required></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="selectProjectForOrg">Project</label>
+                        <select id="selectProjectForOrg" required></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="selectInterval">Reporting Interval</label>
+                        <select id="selectInterval">
+                            <option value="">No schedule</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="dayOfWeekGroup" style="display: none;">
+                        <label for="selectDayOfWeek">Due Day of Week</label>
+                        <select id="selectDayOfWeek">
+                            <option value="0">Sunday</option>
+                            <option value="1">Monday</option>
+                            <option value="2">Tuesday</option>
+                            <option value="3">Wednesday</option>
+                            <option value="4">Thursday</option>
+                            <option value="5">Friday</option>
+                            <option value="6">Saturday</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="dayOfMonthGroup" style="display: none;">
+                        <label for="selectDayOfMonth">Due Day of Month</label>
+                        <select id="selectDayOfMonth"></select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Link Organization to Project</button>
+                </form>
+
+                <h3 style="margin-top: 24px; margin-bottom: 12px; font-size: 1rem;">Current Organization Links</h3>
+                <ul id="orgLinksList" class="link-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Schedule Modal -->
+    <div id="editScheduleModal" class="modal-overlay">
+        <div class="modal">
+            <h2 class="modal-title">Edit Reporting Schedule</h2>
+            <input type="hidden" id="editOrgId">
+            <input type="hidden" id="editProjectId">
+
+            <div class="form-group">
+                <label for="editInterval">Reporting Interval</label>
+                <select id="editInterval">
+                    <option value="">No schedule</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="editDayOfWeekGroup" style="display: none;">
+                <label for="editDayOfWeek">Due Day of Week</label>
+                <select id="editDayOfWeek">
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="editDayOfMonthGroup" style="display: none;">
+                <label for="editDayOfMonth">Due Day of Month</label>
+                <select id="editDayOfMonth"></select>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSchedule()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Require wrangler access
+        if (!Auth.requireWrangler()) {
+            throw new Error('Access denied');
+        }
+
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        function loadDropdowns() {
+            // Load expectations
+            const expectations = Storage.getExpectations();
+            App.populateSelect('selectExpectation', expectations, 'id', 'name', 'Select Expectation...');
+
+            // Load projects (for both dropdowns)
+            const projects = Storage.getProjects();
+            App.populateSelect('selectProjectForExp', projects, 'id', 'name', 'Select Project...');
+            App.populateSelect('selectProjectForOrg', projects, 'id', 'name', 'Select Project...');
+
+            // Load organizations
+            const orgs = Storage.getOrganizations();
+            App.populateSelect('selectOrg', orgs, 'id', 'name', 'Select Organization...');
+
+            // Populate day of month dropdowns
+            const dayOfMonthSelect = document.getElementById('selectDayOfMonth');
+            const editDayOfMonthSelect = document.getElementById('editDayOfMonth');
+            for (let i = 1; i <= 31; i++) {
+                dayOfMonthSelect.innerHTML += `<option value="${i}">${i}</option>`;
+                editDayOfMonthSelect.innerHTML += `<option value="${i}">${i}</option>`;
+            }
+        }
+
+        // Show/hide day fields based on interval selection
+        document.getElementById('selectInterval').addEventListener('change', function() {
+            document.getElementById('dayOfWeekGroup').style.display = this.value === 'weekly' ? 'block' : 'none';
+            document.getElementById('dayOfMonthGroup').style.display = this.value === 'monthly' ? 'block' : 'none';
+        });
+
+        document.getElementById('editInterval').addEventListener('change', function() {
+            document.getElementById('editDayOfWeekGroup').style.display = this.value === 'weekly' ? 'block' : 'none';
+            document.getElementById('editDayOfMonthGroup').style.display = this.value === 'monthly' ? 'block' : 'none';
+        });
+
+        function loadExpectationLinks() {
+            const links = Storage.getProjectExpectationLinks();
+            const list = document.getElementById('expectationLinksList');
+
+            if (links.length === 0) {
+                list.innerHTML = '<li style="color: var(--gray-500); padding: 12px;">No links yet</li>';
+                return;
+            }
+
+            list.innerHTML = links.map(link => {
+                const exp = Storage.getExpectation(link.expectationId);
+                const project = Storage.getProject(link.projectId);
+                if (!exp || !project) return '';
+
+                return `
+                    <li>
+                        <span><strong>${exp.name}</strong> &rarr; ${project.name}</span>
+                        <button class="btn btn-danger btn-sm" onclick="unlinkExpectation('${link.expectationId}', '${link.projectId}')">Unlink</button>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function getScheduleText(link) {
+            if (!link.reportingInterval) return '<em>No schedule</em>';
+
+            let text = link.reportingInterval.charAt(0).toUpperCase() + link.reportingInterval.slice(1);
+            if (link.reportingInterval === 'weekly') {
+                text += ` (${dayNames[link.reportingDayOfWeek || 0]})`;
+            } else if (link.reportingInterval === 'monthly') {
+                text += ` (Day ${link.reportingDayOfMonth || 1})`;
+            }
+            return text;
+        }
+
+        function loadOrgLinks() {
+            const links = Storage.getOrgProjectLinks();
+            const list = document.getElementById('orgLinksList');
+
+            if (links.length === 0) {
+                list.innerHTML = '<li style="color: var(--gray-500); padding: 12px;">No links yet</li>';
+                return;
+            }
+
+            list.innerHTML = links.map(link => {
+                const org = Storage.getOrganization(link.orgId);
+                const project = Storage.getProject(link.projectId);
+                if (!org || !project) return '';
+
+                const scheduleText = getScheduleText(link);
+                const streakText = link.streak ? ` | Streak: ${link.streak}` : '';
+
+                return `
+                    <li style="flex-wrap: wrap;">
+                        <div style="flex: 1;">
+                            <strong>${org.name}</strong> &rarr; ${project.name}<br>
+                            <small style="color: var(--gray-500);">Schedule: ${scheduleText}${streakText}</small>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-secondary btn-sm" onclick="editSchedule('${link.orgId}', '${link.projectId}')">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="unlinkOrg('${link.orgId}', '${link.projectId}')">Unlink</button>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function editSchedule(orgId, projectId) {
+            const link = Storage.getOrgProjectLink(orgId, projectId);
+            if (!link) return;
+
+            document.getElementById('editOrgId').value = orgId;
+            document.getElementById('editProjectId').value = projectId;
+            document.getElementById('editInterval').value = link.reportingInterval || '';
+            document.getElementById('editDayOfWeek').value = link.reportingDayOfWeek || 0;
+            document.getElementById('editDayOfMonth').value = link.reportingDayOfMonth || 1;
+
+            // Show/hide day fields
+            document.getElementById('editDayOfWeekGroup').style.display = link.reportingInterval === 'weekly' ? 'block' : 'none';
+            document.getElementById('editDayOfMonthGroup').style.display = link.reportingInterval === 'monthly' ? 'block' : 'none';
+
+            document.getElementById('editScheduleModal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editScheduleModal').classList.remove('active');
+        }
+
+        function saveSchedule() {
+            const orgId = document.getElementById('editOrgId').value;
+            const projectId = document.getElementById('editProjectId').value;
+            const interval = document.getElementById('editInterval').value || null;
+            const dayOfWeek = parseInt(document.getElementById('editDayOfWeek').value);
+            const dayOfMonth = parseInt(document.getElementById('editDayOfMonth').value);
+
+            Storage.updateOrgProjectLink(orgId, projectId, {
+                reportingInterval: interval,
+                reportingDayOfWeek: interval === 'weekly' ? dayOfWeek : null,
+                reportingDayOfMonth: interval === 'monthly' ? dayOfMonth : null
+            });
+
+            closeEditModal();
+            loadOrgLinks();
+            App.showMessage('pageMessage', 'Schedule updated successfully');
+        }
+
+        function unlinkExpectation(expectationId, projectId) {
+            Storage.unlinkExpectationFromProject(expectationId, projectId);
+            loadExpectationLinks();
+            App.showMessage('pageMessage', 'Expectation unlinked from project');
+        }
+
+        function unlinkOrg(orgId, projectId) {
+            Storage.unlinkOrgFromProject(orgId, projectId);
+            loadOrgLinks();
+            App.showMessage('pageMessage', 'Organization unlinked from project');
+        }
+
+        // Expectation link form
+        document.getElementById('expectationLinkForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const expectationId = document.getElementById('selectExpectation').value;
+            const projectId = document.getElementById('selectProjectForExp').value;
+
+            if (!expectationId || !projectId) {
+                App.showMessage('pageMessage', 'Please select both an expectation and a project', true);
+                return;
+            }
+
+            Storage.linkExpectationToProject(expectationId, projectId);
+            loadExpectationLinks();
+            App.showMessage('pageMessage', 'Expectation linked to project');
+
+            // Reset selections
+            document.getElementById('selectExpectation').value = '';
+            document.getElementById('selectProjectForExp').value = '';
+        });
+
+        // Org link form
+        document.getElementById('orgLinkForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const orgId = document.getElementById('selectOrg').value;
+            const projectId = document.getElementById('selectProjectForOrg').value;
+            const interval = document.getElementById('selectInterval').value || null;
+            const dayOfWeek = parseInt(document.getElementById('selectDayOfWeek').value);
+            const dayOfMonth = parseInt(document.getElementById('selectDayOfMonth').value);
+
+            if (!orgId || !projectId) {
+                App.showMessage('pageMessage', 'Please select both an organization and a project', true);
+                return;
+            }
+
+            const reportingDay = interval === 'weekly' ? dayOfWeek : (interval === 'monthly' ? dayOfMonth : null);
+            Storage.linkOrgToProject(orgId, projectId, interval, reportingDay);
+            loadOrgLinks();
+            App.showMessage('pageMessage', 'Organization linked to project');
+
+            // Reset selections
+            document.getElementById('selectOrg').value = '';
+            document.getElementById('selectProjectForOrg').value = '';
+            document.getElementById('selectInterval').value = '';
+            document.getElementById('dayOfWeekGroup').style.display = 'none';
+            document.getElementById('dayOfMonthGroup').style.display = 'none';
+        });
+
+        // Close modal on overlay click
+        document.getElementById('editScheduleModal').addEventListener('click', function(e) {
+            if (e.target === this) closeEditModal();
+        });
+
+        // Initialize
+        loadDropdowns();
+        loadExpectationLinks();
+        loadOrgLinks();
+    </script>
+</body>
+</html>

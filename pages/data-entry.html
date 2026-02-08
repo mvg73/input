@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Entry</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <div class="page-header">
+        <h1 id="projectTitle">Data Entry</h1>
+        <div class="user-info">
+            <span data-user-name></span>
+            <a href="customer-dashboard.html" class="btn btn-secondary btn-sm">Back to Projects</a>
+            <button class="btn btn-secondary btn-sm" data-action="logout">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="pageMessage" class="message"></div>
+
+        <div id="dataEntryContainer"></div>
+
+        <div id="noExpectations" style="display: none;" class="card">
+            <p style="text-align: center; color: var(--gray-500); padding: 40px;">
+                No data set expectations are configured for this project.<br>
+                Please contact your administrator.
+            </p>
+        </div>
+
+        <!-- Success screen shown after signing -->
+        <div id="successScreen" style="display: none;" class="card">
+            <div class="success-screen">
+                <h2>Data Certified Successfully!</h2>
+                <p>Your data has been signed and submitted.</p>
+                <div class="success-buttons">
+                    <a href="customer-dashboard.html" class="btn btn-primary">Projects</a>
+                    <a href="my-certifications.html" class="btn btn-secondary">My Certifications</a>
+                    <button class="btn btn-secondary" data-action="logout">Logout</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Certification Modal -->
+    <div id="certificationModal" class="modal-overlay">
+        <div class="modal">
+            <h2 class="modal-title">Certification</h2>
+            <div id="modalDataSummary" class="modal-data"></div>
+            <div class="certification-text">
+                "I hereby certify that, to the best of my knowledge, the information provided in this report is true, accurate, and complete."
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="signAndSubmit()">Sign</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/app.js"></script>
+    <script src="../js/validation.js"></script>
+    <script>
+        // Require login
+        if (!Auth.requireLogin()) {
+            throw new Error('Login required');
+        }
+
+        // Get project ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectId = urlParams.get('project');
+
+        if (!projectId) {
+            window.location.href = 'customer-dashboard.html';
+        }
+
+        const project = Storage.getProject(projectId);
+        const user = Auth.getCurrentUser();
+
+        // Store pending submission data
+        let pendingSubmission = null;
+
+        if (!project) {
+            App.showMessage('pageMessage', 'Project not found', true);
+        } else {
+            document.getElementById('projectTitle').textContent = `Data Entry: ${project.name}`;
+            loadExpectations();
+        }
+
+        function loadExpectations() {
+            const expectations = Storage.getExpectationsForProject(projectId);
+            const container = document.getElementById('dataEntryContainer');
+            const noExpectations = document.getElementById('noExpectations');
+
+            if (expectations.length === 0) {
+                container.style.display = 'none';
+                noExpectations.style.display = 'block';
+                return;
+            }
+
+            container.innerHTML = expectations.map(exp => `
+                <div class="card" id="expectation-${exp.id}">
+                    <h2 class="card-title">${exp.name}</h2>
+                    <form class="data-entry-form" data-expectation-id="${exp.id}">
+                        ${exp.columns.map(col => `
+                            <div class="form-group" data-column="${col.name}">
+                                <div class="column-header">
+                                    <label for="input-${exp.id}-${col.name}">${col.name}</label>
+                                    <span class="column-meta">${Validation.getColumnRequirements(col)}</span>
+                                </div>
+                                ${col.description ? `<p class="field-description">${col.description}</p>` : ''}
+                                <input
+                                    type="text"
+                                    id="input-${exp.id}-${col.name}"
+                                    name="${col.name}"
+                                    data-nulls-ok="${col.nullsOk}"
+                                    data-must-be-int="${col.mustBeInt}"
+                                    placeholder="${col.mustBeInt ? 'Enter a number...' : 'Enter value...'}"
+                                >
+                                <div class="field-error" id="error-${exp.id}-${col.name}"></div>
+                            </div>
+                        `).join('')}
+                        <button type="submit" class="btn btn-primary">Certify</button>
+                    </form>
+                </div>
+            `).join('');
+
+            // Add validation on blur for each input
+            document.querySelectorAll('.data-entry-form input').forEach(input => {
+                input.addEventListener('blur', function() {
+                    validateField(this);
+                });
+            });
+
+            // Add form submit handlers
+            document.querySelectorAll('.data-entry-form').forEach(form => {
+                form.addEventListener('submit', handleFormSubmit);
+            });
+        }
+
+        function validateField(input) {
+            const column = {
+                name: input.name,
+                nullsOk: input.dataset.nullsOk === 'true',
+                mustBeInt: input.dataset.mustBeInt === 'true'
+            };
+
+            const result = Validation.validateValue(input.value, column);
+            const errorEl = input.parentElement.querySelector('.field-error');
+
+            if (!result.valid) {
+                input.classList.add('invalid');
+                errorEl.textContent = result.error;
+                errorEl.style.display = 'block';
+            } else {
+                input.classList.remove('invalid');
+                errorEl.textContent = '';
+                errorEl.style.display = 'none';
+            }
+
+            return result.valid;
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const expectationId = form.dataset.expectationId;
+            const expectation = Storage.getExpectation(expectationId);
+
+            // Collect and validate all data
+            const data = {};
+            const requiredData = {};
+            let allValid = true;
+
+            form.querySelectorAll('input').forEach(input => {
+                const value = input.value.trim();
+                data[input.name] = value;
+
+                // Track required fields for modal display
+                if (input.dataset.nullsOk !== 'true') {
+                    requiredData[input.name] = value;
+                }
+
+                if (!validateField(input)) {
+                    allValid = false;
+                }
+            });
+
+            if (!allValid) {
+                App.showMessage('pageMessage', 'Please correct the errors highlighted above.', true);
+                return;
+            }
+
+            // Store pending submission and show modal
+            pendingSubmission = {
+                form: form,
+                expectationId: expectationId,
+                expectation: expectation,
+                data: data,
+                requiredData: requiredData
+            };
+
+            showCertificationModal(requiredData);
+        }
+
+        function showCertificationModal(requiredData) {
+            const modal = document.getElementById('certificationModal');
+            const dataSummary = document.getElementById('modalDataSummary');
+
+            // Build data summary HTML
+            const entries = Object.entries(requiredData);
+            if (entries.length === 0) {
+                dataSummary.innerHTML = '<p style="color: var(--gray-500); text-align: center;">No required fields to display</p>';
+            } else {
+                dataSummary.innerHTML = entries.map(([key, value]) => `
+                    <div class="modal-data-item">
+                        <span class="modal-data-label">${key}</span>
+                        <span class="modal-data-value">${value || '<em>empty</em>'}</span>
+                    </div>
+                `).join('');
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('certificationModal').classList.remove('active');
+            pendingSubmission = null;
+        }
+
+        function signAndSubmit() {
+            if (!pendingSubmission) return;
+
+            // Save the data
+            const entry = {
+                orgId: user.id,
+                projectId: projectId,
+                expectationId: pendingSubmission.expectationId,
+                data: pendingSubmission.data
+            };
+
+            Storage.saveCollectedData(entry);
+
+            // Record submission for compliance tracking (updates streak, history, next due date)
+            Storage.recordSubmission(user.id, projectId);
+
+            // Close modal
+            closeModal();
+
+            // Hide the data entry form and show success screen
+            document.getElementById('dataEntryContainer').style.display = 'none';
+            document.getElementById('successScreen').style.display = 'block';
+        }
+
+        // Close modal on overlay click
+        document.getElementById('certificationModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
